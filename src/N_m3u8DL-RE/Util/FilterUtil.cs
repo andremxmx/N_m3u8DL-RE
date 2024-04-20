@@ -145,39 +145,54 @@ namespace N_m3u8DL_RE.Util
         /// </summary>
         /// <param name="streams"></param>
         /// <param name="takeLastCount"></param>
-        public static void SyncStreams(List<StreamSpec> selectedSteams, int takeLastCount = 15)
+        public static void SyncStreams(List<StreamSpec> selectedStreams, int takeLastCount = 15)
         {
+            // Sort the streams based on the number of segments, from smallest to largest
+            selectedStreams = selectedStreams.OrderBy(s => s.Playlist?.MediaParts[0].MediaSegments.Count).ToList();
+        
             //通过Date同步
-            if (selectedSteams.All(x => x.Playlist!.MediaParts[0].MediaSegments.All(x => x.DateTime != null)))
+            if (selectedStreams.All(x => x.Playlist!.MediaParts[0].MediaSegments.All(x => x.DateTime != null)))
             {
-                var minDate = selectedSteams.Max(s => s.Playlist!.MediaParts[0].MediaSegments.Min(s => s.DateTime))!;
-                foreach (var item in selectedSteams)
+                var minDate = selectedStreams[0].Playlist!.MediaParts[0].MediaSegments.Min(s => s.DateTime);
+                foreach (var item in selectedStreams)
                 {
                     foreach (var part in item.Playlist!.MediaParts)
                     {
                         //秒级同步 忽略毫秒
                         part.MediaSegments = part.MediaSegments.Where(s => s.DateTime!.Value.Ticks / TimeSpan.TicksPerSecond >= minDate.Value.Ticks / TimeSpan.TicksPerSecond).ToList();
+        
+                        // Remove extra segments if the current stream has more segments than the reference
+                        if (part.MediaSegments.Count > selectedStreams[0].Playlist!.MediaParts[0].MediaSegments.Count)
+                        {
+                            part.MediaSegments = part.MediaSegments.Take(selectedStreams[0].Playlist!.MediaParts[0].MediaSegments.Count).ToList();
+                        }
                     }
                 }
             }
             else //通过index同步
             {
-                var minIndex = selectedSteams.Max(s => s.Playlist!.MediaParts[0].MediaSegments.Min(s => s.Index));
-                foreach (var item in selectedSteams)
+                var minIndex = selectedStreams[0].Playlist!.MediaParts[0].MediaSegments.Min(s => s.Index);
+                foreach (var item in selectedStreams)
                 {
                     foreach (var part in item.Playlist!.MediaParts)
                     {
                         part.MediaSegments = part.MediaSegments.Where(s => s.Index >= minIndex).ToList();
+        
+                        // Remove extra segments if the current stream has more segments than the reference
+                        if (part.MediaSegments.Count > selectedStreams[0].Playlist!.MediaParts[0].MediaSegments.Count)
+                        {
+                            part.MediaSegments = part.MediaSegments.Take(selectedStreams[0].Playlist!.MediaParts[0].MediaSegments.Count).ToList();
+                        }
                     }
                 }
             }
-
+        
             //取最新的N个分片
-            if (selectedSteams.Any(x => x.Playlist!.MediaParts[0].MediaSegments.Count > takeLastCount))
+            if (selectedStreams.Any(x => x.Playlist!.MediaParts[0].MediaSegments.Count > takeLastCount))
             {
-                var skipCount = selectedSteams.Min(x => x.Playlist!.MediaParts[0].MediaSegments.Count) - takeLastCount + 1;
+                var skipCount = selectedStreams.Min(x => x.Playlist!.MediaParts[0].MediaSegments.Count) - takeLastCount + 1;
                 if (skipCount < 0) skipCount = 0;
-                foreach (var item in selectedSteams)
+                foreach (var item in selectedStreams)
                 {
                     foreach (var part in item.Playlist!.MediaParts)
                     {
